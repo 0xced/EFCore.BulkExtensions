@@ -3,4 +3,3 @@ obj
 .vs
 *.user
 .idea
-/EFCore.BulkExtensions.Tests/testsettings.local.json

@@ -9,8 +9,16 @@ using Xunit;
 
 namespace EFCore.BulkExtensions.Tests
 {
+    [Collection("Database")]
     public class EFCoreBatchTest
     {
+        private readonly DatabaseFixture _databaseFixture;
+
+        public EFCoreBatchTest(DatabaseFixture databaseFixture)
+        {
+            _databaseFixture = databaseFixture;
+        }
+
         protected int EntitiesNumber => 1000;
 
         [Theory]
@@ -18,30 +26,28 @@ namespace EFCore.BulkExtensions.Tests
         [InlineData(DbServer.Sqlite)]
         public void BatchTest(DbServer dbServer)
         {
-            ContextUtil.DbServer = dbServer;
-
             RunDeleteAll(dbServer);
-            RunInsert();
+            RunInsert(dbServer);
             RunBatchUpdate(dbServer);
 
             int deletedEntities = 1;
             if (dbServer == DbServer.SqlServer)
             {
-                RunBatchUpdate_UsingNavigationPropertiesThatTranslateToAnInnerQuery();
-                deletedEntities = RunTopBatchDelete();
+                RunBatchUpdate_UsingNavigationPropertiesThatTranslateToAnInnerQuery(dbServer);
+                deletedEntities = RunTopBatchDelete(dbServer);
             }
 
-            RunBatchDelete();
-            RunBatchDelete2();
-            RunContainsBatchDelete();
-            RunContainsBatchDelete2();
-            RunContainsBatchDelete3();
-            RunAnyBatchDelete();
+            RunBatchDelete(dbServer);
+            RunBatchDelete2(dbServer);
+            RunContainsBatchDelete(dbServer);
+            RunContainsBatchDelete2(dbServer);
+            RunContainsBatchDelete3(dbServer);
+            RunAnyBatchDelete(dbServer);
 
-            UpdateSetting(SettingsEnum.Sett1, "Val1UPDATE");
-            UpdateByteArrayToDefault();
+            UpdateSetting(dbServer, SettingsEnum.Sett1, "Val1UPDATE");
+            UpdateByteArrayToDefault(dbServer);
 
-            using (var context = new TestContext(ContextUtil.GetOptions()))
+            using (var context = new TestContext(_databaseFixture.GetOptions(dbServer)))
             {
                 var firstItem = context.Items.ToList().FirstOrDefault();
                 var lastItem = context.Items.ToList().LastOrDefault();
@@ -60,20 +66,20 @@ namespace EFCore.BulkExtensions.Tests
 
             if (dbServer == DbServer.SqlServer)
             {
-                RunUdttBatch();
+                RunUdttBatch(dbServer);
             }
 
             if (dbServer == DbServer.SqlServer)
             {
                 // Removing ORDER BY and CTE's are not implemented for SQLite.
-                RunOrderByDeletes();
-                RunIncludeDelete();
+                RunOrderByDeletes(dbServer);
+                RunIncludeDelete(dbServer);
             }
         }
 
         internal void RunDeleteAll(DbServer dbServer)
         {
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
 
             context.Items.Add(new Item { }); // used for initial add so that after RESEED it starts from 1, not 0
             context.SaveChanges();
@@ -93,7 +99,7 @@ namespace EFCore.BulkExtensions.Tests
 
         private void RunBatchUpdate(DbServer dbServer)
         {
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
 
             //var updateColumns = new List<string> { nameof(Item.Quantity) }; // Adding explicitly PropertyName for update to its default value
 
@@ -129,10 +135,10 @@ namespace EFCore.BulkExtensions.Tests
             }
         }
 
-        private void RunBatchUpdate_UsingNavigationPropertiesThatTranslateToAnInnerQuery()
+        private void RunBatchUpdate_UsingNavigationPropertiesThatTranslateToAnInnerQuery(DbServer dbServer)
         {
             var testDbCommandInterceptor = new TestDbCommandInterceptor();
-            using var context = new TestContext(ContextUtil.GetOptions(testDbCommandInterceptor));
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer, testDbCommandInterceptor));
 
             context.Parents.Where(parent => parent.ParentId < 5 && !string.IsNullOrEmpty(parent.Details.Notes))
                 .BatchUpdate(parent => new Parent { Description = parent.Details.Notes ?? "Fallback" });
@@ -184,9 +190,9 @@ WHERE [p].[ParentId] = 1";
             Assert.Equal(expectedSql.Replace("\r\n", "\n"), actualSqlExecuted.Replace("\r\n", "\n"));
         }
 
-        private void RunInsert()
+        private void RunInsert(DbServer dbServer)
         {
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
 
             var entities = new List<Item>();
             for (int i = 1; i <= EntitiesNumber; i++)
@@ -207,71 +213,71 @@ WHERE [p].[ParentId] = 1";
             context.SaveChanges();
         }
 
-        private int RunTopBatchDelete()
+        private int RunTopBatchDelete(DbServer dbServer)
         {
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
             return context.Items.Where(a => a.ItemId > 500).Take(1).BatchDelete();
         }
 
-        private void RunBatchDelete()
+        private void RunBatchDelete(DbServer dbServer)
         {
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
             context.Items.Where(a => a.ItemId > 500).BatchDelete();
         }
 
-        private void RunBatchDelete2()
+        private void RunBatchDelete2(DbServer dbServer)
         {
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
             var nameToDelete = "N4";
             context.Items.Where(a => a.Name == nameToDelete).BatchDelete();
         }
 
-        private void RunContainsBatchDelete()
+        private void RunContainsBatchDelete(DbServer dbServer)
         {
             var descriptionsToDelete = new List<string> { "info" };
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
             context.Items.Where(a => descriptionsToDelete.Contains(a.Description)).BatchDelete();
         }
 
-        private void RunContainsBatchDelete2()
+        private void RunContainsBatchDelete2(DbServer dbServer)
         {
             var descriptionsToDelete = new List<string> { "info" };
             var nameToDelete = "N4";
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
             context.Items.Where(a => descriptionsToDelete.Contains(a.Description) || a.Name == nameToDelete).BatchDelete();
         }
 
-        private void RunContainsBatchDelete3()
+        private void RunContainsBatchDelete3(DbServer dbServer)
         {
             var descriptionsToDelete = new List<string>();
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
             context.Items.Where(a => descriptionsToDelete.Contains(a.Description)).BatchDelete();
         }
 
-        private void RunAnyBatchDelete()
+        private void RunAnyBatchDelete(DbServer dbServer)
         {
             var descriptionsToDelete = new List<string> { "info" };
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
             context.Items.Where(a => descriptionsToDelete.Any(toDelete => toDelete == a.Description)).BatchDelete();
         }
 
-        private void RunOrderByDeletes()
+        private void RunOrderByDeletes(DbServer dbServer)
         {
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
             context.Items.OrderBy(x => x.Name).Skip(2).Take(4).BatchDelete();
             context.Items.OrderBy(x => x.Name).Take(2).BatchDelete();
             context.Items.OrderBy(x => x.Name).BatchDelete();
         }
 
-        private void RunIncludeDelete()
+        private void RunIncludeDelete(DbServer dbServer)
         {
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
             context.Items.Include(x => x.ItemHistories).Where(x => !x.ItemHistories.Any()).OrderBy(x => x.ItemId).Skip(2).Take(4).BatchDelete();
             context.Items.Include(x => x.ItemHistories).Where(x => !x.ItemHistories.Any()).OrderBy(x => x.ItemId).Take(4).BatchDelete();
             context.Items.Include(x => x.ItemHistories).Where(x => !x.ItemHistories.Any()).BatchDelete();
         }
 
-        private void RunUdttBatch()
+        private void RunUdttBatch(DbServer dbServer)
         {
             var userRoles = (
                 from userId in Enumerable.Range(1, 5)
@@ -289,7 +295,7 @@ WHERE [p].[ParentId] = 1";
                 .Select(x => new UdttIntInt { C1 = x.UserId, C2 = x.RoleId, })
                 .ToList();
 
-            using (var context = new TestContext(ContextUtil.GetOptions()))
+            using (var context = new TestContext(_databaseFixture.GetOptions(dbServer)))
             {
                 context.UserRoles.BatchDelete();
 
@@ -298,7 +304,7 @@ WHERE [p].[ParentId] = 1";
             }
 
             // read with User Defined Table Type parameter
-            using (var context = new TestContext(ContextUtil.GetOptions()))
+            using (var context = new TestContext(_databaseFixture.GetOptions(dbServer)))
             {
                 var keysToUpdateQueryable = GetQueryableUdtt(context, keysToUpdate);
                 var userRolesToUpdate = context.UserRoles
@@ -315,7 +321,7 @@ WHERE [p].[ParentId] = 1";
             }
 
             // batch update and batch delete with User Defined Table Type parameter
-            using (var context = new TestContext(ContextUtil.GetOptions()))
+            using (var context = new TestContext(_databaseFixture.GetOptions(dbServer)))
             {
                 var keysToUpdateQueryable = GetQueryableUdtt(context, keysToUpdate);
                 var keysToDeleteQueryable = GetQueryableUdtt(context, keysToDelete);
@@ -327,7 +333,7 @@ WHERE [p].[ParentId] = 1";
                 userRolesToDelete.BatchDelete();
             }
 
-            using (var context = new TestContext(ContextUtil.GetOptions()))
+            using (var context = new TestContext(_databaseFixture.GetOptions(dbServer)))
             {
                 Assert.Equal(keysToUpdate.Count, context.UserRoles.Count());
                 Assert.True(!context.UserRoles.Where(x => x.Description == null || x.Description != "updated").Any());
@@ -348,9 +354,9 @@ WHERE [p].[ParentId] = 1";
             return context.Set<UdttIntInt>().FromSqlRaw($@"select * from {parameterName}", parameter);
         }
 
-        private void UpdateSetting(SettingsEnum settings, object value)
+        private void UpdateSetting(DbServer dbServer, SettingsEnum settings, object value)
         {
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
             context.Truncate<Setting>();
 
             context.Settings.Add(new Setting() { Settings = SettingsEnum.Sett1, Value = "Val1" });
@@ -362,9 +368,9 @@ WHERE [p].[ParentId] = 1";
             context.Truncate<Setting>();
         }
 
-        private void UpdateByteArrayToDefault()
+        private void UpdateByteArrayToDefault(DbServer dbServer)
         {
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
 
             context.Files.BatchUpdate(new File { DataBytes = null }, updateColumns: new List<string> { nameof(File.DataBytes) });
             context.Files.BatchUpdate(a => new File { DataBytes = null });

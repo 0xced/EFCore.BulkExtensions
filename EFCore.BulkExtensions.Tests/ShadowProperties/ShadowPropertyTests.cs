@@ -7,16 +7,23 @@ using Xunit;
 
 namespace EFCore.BulkExtensions.Tests.ShadowProperties
 {
-    public class ShadowPropertyTests : IDisposable
+    [Collection("Database")]
+    public class ShadowPropertyTests
     {
+        private readonly DatabaseFixture _databaseFixture;
+
+        public ShadowPropertyTests(DatabaseFixture databaseFixture)
+        {
+            _databaseFixture = databaseFixture;
+        }
+
         [Theory]
         [InlineData(DbServer.SqlServer)]
         [InlineData(DbServer.Sqlite)]
         public void BulkInsertOrUpdate_EntityWithShadowProperties_SavesToDatabase(DbServer dbServer)
         {
-            ContextUtil.DbServer = dbServer;
-
-            using var db = new SpDbContext(ContextUtil.GetOptions<SpDbContext>(databaseName: $"{nameof(EFCoreBulkTest)}_ShadowProperties"));
+            using var db = new SpDbContext(_databaseFixture.GetOptions<SpDbContext>(dbServer, databaseName: $"{nameof(EFCoreBulkTest)}_ShadowProperties"));
+            using var _ = new EnsureCreatedAndDeleted(db.Database);
 
             db.BulkInsertOrUpdate(this.GetTestData(db).ToList(), new BulkConfig
             {
@@ -38,12 +45,6 @@ namespace EFCore.BulkExtensions.Tests.ShadowProperties
             db.Entry(one).Property(SpModel.SpDateTime).CurrentValue = new DateTime(2021, 02, 14);
 
             yield return one;
-        }
-
-        public void Dispose()
-        {
-            using var db = new SpDbContext(ContextUtil.GetOptions<SpDbContext>(databaseName: $"{nameof(EFCoreBulkTest)}_ShadowProperties"));
-            db.Database.EnsureDeleted();
         }
     }
 }

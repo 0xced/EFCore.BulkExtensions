@@ -2,7 +2,6 @@ using EFCore.BulkExtensions.SqlAdapters;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
-using Microsoft.Extensions.Caching.Memory;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -12,8 +11,16 @@ using Xunit;
 
 namespace EFCore.BulkExtensions.Tests
 {
+    [Collection("Database")]
     public class EFCoreBulkTestAsync
     {
+        private readonly DatabaseFixture _databaseFixture;
+
+        public EFCoreBulkTestAsync(DatabaseFixture databaseFixture)
+        {
+            _databaseFixture = databaseFixture;
+        }
+        
         protected int EntitiesNumber => 10000;
 
         private static Func<TestContext, int> ItemsCountQuery = EF.CompileQuery<TestContext, int>(ctx => ctx.Items.Count());
@@ -26,21 +33,18 @@ namespace EFCore.BulkExtensions.Tests
         //[InlineData(DatabaseType.SqlServer, false)] // for speed comparison with Regular EF CUD operations
         public async Task OperationsTestAsync(DbServer dbServer, bool isBulk)
         {
-            ContextUtil.DbServer = dbServer;
-
-            //await DeletePreviousDatabaseAsync().ConfigureAwait(false);
-            await new EFCoreBatchTestAsync().RunDeleteAllAsync(dbServer);
+            await new EFCoreBatchTestAsync(_databaseFixture).RunDeleteAllAsync(dbServer);
 
             // Test can be run individually by commenting others and running each separately in order one after another
-            await RunInsertAsync(isBulk);
+            await RunInsertAsync(isBulk, dbServer);
             await RunInsertOrUpdateAsync(isBulk, dbServer);
             await RunUpdateAsync(isBulk, dbServer);
 
-            await RunReadAsync(isBulk);
+            await RunReadAsync(isBulk, dbServer);
 
             if (dbServer == DbServer.SqlServer)
             {
-                await RunInsertOrUpdateOrDeleteAsync(isBulk); // Not supported for Sqlite (has only UPSERT), instead use BulkRead, then split list into sublists and call separately Bulk methods for Insert, Update, Delete.
+                await RunInsertOrUpdateOrDeleteAsync(isBulk, dbServer); // Not supported for Sqlite (has only UPSERT), instead use BulkRead, then split list into sublists and call separately Bulk methods for Insert, Update, Delete.
             }
             //await RunDeleteAsync(isBulk, dbServer);
         }
@@ -54,21 +58,14 @@ namespace EFCore.BulkExtensions.Tests
             await BulkOperationShouldNotCloseOpenConnectionAsync(dbServer, context => context.BulkUpdateAsync(new[] { new Item() }));
         }
 
-        private async Task DeletePreviousDatabaseAsync()
-        {
-            using var context = new TestContext(ContextUtil.GetOptions());
-            await context.Database.EnsureDeletedAsync().ConfigureAwait(false);
-        }
-
         private void WriteProgress(decimal percentage)
         {
             Debug.WriteLine(percentage);
         }
 
-        private static async Task BulkOperationShouldNotCloseOpenConnectionAsync(DbServer dbServer, Func<TestContext, Task> bulkOperation)
+        private async Task BulkOperationShouldNotCloseOpenConnectionAsync(DbServer dbServer, Func<TestContext, Task> bulkOperation)
         {
-            ContextUtil.DbServer = dbServer;
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
 
             var sqlHelper = context.GetService<ISqlGenerationHelper>();
             await context.Database.OpenConnectionAsync();
@@ -98,9 +95,9 @@ namespace EFCore.BulkExtensions.Tests
             }
         }
 
-        private async Task RunInsertAsync(bool isBulk)
+        private async Task RunInsertAsync(bool isBulk, DbServer dbServer)
         {
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
 
             var entities = new List<Item>();
             var subEntities = new List<ItemHistory>();
@@ -135,7 +132,7 @@ namespace EFCore.BulkExtensions.Tests
 
             if (isBulk)
             {
-                if (ContextUtil.DbServer == DbServer.SqlServer)
+                if (dbServer == DbServer.SqlServer)
                 {
                     using var transaction = await context.Database.BeginTransactionAsync();
                     var bulkConfig = new BulkConfig
@@ -163,7 +160,7 @@ namespace EFCore.BulkExtensions.Tests
 
                     transaction.Commit();
                 }
-                else if (ContextUtil.DbServer == DbServer.Sqlite)
+                else if (dbServer == DbServer.Sqlite)
                 {
                     using var transaction = context.Database.BeginTransaction();
 
@@ -203,7 +200,7 @@ namespace EFCore.BulkExtensions.Tests
 
         private async Task RunInsertOrUpdateAsync(bool isBulk, DbServer dbServer)
         {
-            using (var context = new TestContext(ContextUtil.GetOptions()))
+            using (var context = new TestContext(_databaseFixture.GetOptions(dbServer)))
             {
                 var entities = new List<Item>();
                 var dateTimeNow = DateTime.Now;
@@ -246,9 +243,9 @@ namespace EFCore.BulkExtensions.Tests
             }
         }
 
-        private async Task RunInsertOrUpdateOrDeleteAsync(bool isBulk)
+        private async Task RunInsertOrUpdateOrDeleteAsync(bool isBulk, DbServer dbServer)
         {
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
 
             var entities = new List<Item>();
             var dateTimeNow = DateTime.Now;
@@ -286,7 +283,7 @@ namespace EFCore.BulkExtensions.Tests
             }
 
             // TEST
-            using var contextRead = new TestContext(ContextUtil.GetOptions());
+            using var contextRead = new TestContext(_databaseFixture.GetOptions(dbServer));
             int entitiesCount = await contextRead.Items.CountAsync(); // = ItemsCountQuery(context);
             Item firstEntity = contextRead.Items.OrderBy(a => a.ItemId).FirstOrDefault(); // = LastItemQuery(context);
             Item lastEntity = contextRead.Items.OrderByDescending(a => a.ItemId).FirstOrDefault();
@@ -316,7 +313,7 @@ namespace EFCore.BulkExtensions.Tests
 
         private async Task RunUpdateAsync(bool isBulk, DbServer dbServer)
         {
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
 
             int counter = 1;
             var entities = AllItemsQuery(context).ToList();
@@ -351,9 +348,9 @@ namespace EFCore.BulkExtensions.Tests
             Assert.Equal("Desc Update " + EntitiesNumber, lastEntity.Description);
         }
 
-        private async Task RunReadAsync(bool isBulk)
+        private async Task RunReadAsync(bool isBulk, DbServer dbServer)
         {
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
 
             var entities = new List<Item>();
             for (int i = 1; i < EntitiesNumber; i++)
@@ -372,7 +369,7 @@ namespace EFCore.BulkExtensions.Tests
 
         private async Task RunDeleteAsync(bool isBulk, DbServer dbServer)
         {
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
 
             var entities = AllItemsQuery(context).ToList();
             // ItemHistories will also be deleted because of Relationship - ItemId (Delete Rule: Cascade)

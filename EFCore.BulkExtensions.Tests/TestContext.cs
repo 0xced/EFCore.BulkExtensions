@@ -1,15 +1,11 @@
-using EFCore.BulkExtensions.SqlAdapters;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
-using Microsoft.Extensions.Configuration;
 using NetTopologySuite.Geometries;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
-using System.Linq;
 
 namespace EFCore.BulkExtensions.Tests
 {
@@ -116,71 +112,6 @@ namespace EFCore.BulkExtensions.Tests
             //modelBuilder.Entity<Document>().Property(x => x.RowVersion).HasColumnType("timestamp").ValueGeneratedOnAddOrUpdate().HasConversion(new NumberToBytesConverter<ulong>()).IsConcurrencyToken();
 
             //modelBuilder.Entity<Item>().HasQueryFilter(p => p.Description != "1234"); // For testing Global Filter
-        }
-    }
-
-    public static class ContextUtil
-    {
-        public static DbServer DbServer { get; set; }
-
-        public static DbContextOptions GetOptions(IInterceptor dbInterceptor) => GetOptions(new[] { dbInterceptor });
-        public static DbContextOptions GetOptions(IEnumerable<IInterceptor> dbInterceptors = null) => GetOptions<TestContext>(dbInterceptors);
-
-        public static DbContextOptions GetOptions<TDbContext>(IEnumerable<IInterceptor> dbInterceptors = null, string databaseName = nameof(EFCoreBulkTest))
-            where TDbContext: DbContext
-        {
-            var optionsBuilder = new DbContextOptionsBuilder<TDbContext>();
-
-            if (DbServer == DbServer.SqlServer)
-            {
-                var connectionString = GetSqlServerConnectionString(databaseName);
-
-                // ALTERNATIVELY (Using MSSQLLocalDB):
-                //var connectionString = $@"Data Source=(localdb)\MSSQLLocalDB;Database={databaseName};Trusted_Connection=True;MultipleActiveResultSets=True";
-
-                //optionsBuilder.UseSqlServer(connectionString); // Can NOT Test with UseInMemoryDb (Exception: Relational-specific methods can only be used when the context is using a relational)
-                optionsBuilder.UseSqlServer(connectionString, opt => opt.UseNetTopologySuite()); // NetTopologySuite for Geometry / Geometry types
-            }
-            else if (DbServer == DbServer.Sqlite)
-            {
-                string connectionString = GetSqliteConnectionString(databaseName);
-                optionsBuilder.UseSqlite(connectionString);
-                SQLitePCL.Batteries.Init();
-
-                // ALTERNATIVELY:
-                //string connectionString = (new SqliteConnectionStringBuilder { DataSource = $"{databaseName}Lite.db" }).ToString();
-                //optionsBuilder.UseSqlite(new SqliteConnection(connectionString));
-            }
-            else
-            {
-                throw new NotSupportedException($"Database {DbServer} is not supported. Only SQL Server and SQLite are Currently supported.");
-            }
-
-            if (dbInterceptors?.Any() == true)
-            {
-                optionsBuilder.AddInterceptors(dbInterceptors);
-            }
-
-            return optionsBuilder.Options;
-        }
-
-        private static IConfiguration GetConfiguration()
-        {
-            var configBuilder = new ConfigurationBuilder()
-                .AddJsonFile("testsettings.json", optional: false)
-                .AddJsonFile("testsettings.local.json", optional: true);
-
-            return configBuilder.Build();
-        }
-
-        public static string GetSqlServerConnectionString(string databaseName)
-        {
-            return GetConfiguration().GetConnectionString("SqlServer").Replace("{databaseName}", databaseName);
-        }
-
-        public static string GetSqliteConnectionString(string databaseName)
-        {
-            return GetConfiguration().GetConnectionString("Sqlite").Replace("{databaseName}", databaseName);
         }
     }
 

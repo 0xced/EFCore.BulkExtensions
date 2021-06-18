@@ -9,8 +9,16 @@ using Xunit;
 
 namespace EFCore.BulkExtensions.Tests
 {
+    [Collection("Database")]
     public class EFCoreBulkTestAtypical
     {
+        private readonly DatabaseFixture _databaseFixture;
+
+        public EFCoreBulkTestAtypical(DatabaseFixture databaseFixture)
+        {
+            _databaseFixture = databaseFixture;
+        }
+        
         protected int EntitiesNumber => 1000;
 
         [Theory]
@@ -18,8 +26,7 @@ namespace EFCore.BulkExtensions.Tests
         [InlineData(DbServer.Sqlite)] // Does NOT have Computed Columns
         private void ComputedAndDefaultValuesTest(DbServer dbServer)
         {
-            ContextUtil.DbServer = dbServer;
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
             context.Truncate<Document>();
             bool isSqlite = dbServer == DbServer.Sqlite;
 
@@ -76,8 +83,7 @@ namespace EFCore.BulkExtensions.Tests
         //[InlineData(DbServer.Sqlite)] // No TimeStamp column type but can be set with DefaultValueSql: "CURRENT_TIMESTAMP" as it is in OnModelCreating() method.
         private void TimeStampTest(DbServer dbServer)
         {
-            ContextUtil.DbServer = dbServer;
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
 
             context.Truncate<File>();
 
@@ -148,8 +154,7 @@ namespace EFCore.BulkExtensions.Tests
         [InlineData(DbServer.Sqlite)]
         private void CompositeKeyTest(DbServer dbServer)
         {
-            ContextUtil.DbServer = dbServer;
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
 
             context.Truncate<UserRole>();
 
@@ -196,8 +201,7 @@ namespace EFCore.BulkExtensions.Tests
         [InlineData(DbServer.Sqlite)]
         private void DiscriminatorShadowTest(DbServer dbServer)
         {
-            ContextUtil.DbServer = dbServer;
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
 
             context.BulkDelete(context.Students.ToList());
 
@@ -241,8 +245,7 @@ namespace EFCore.BulkExtensions.Tests
         [InlineData(DbServer.Sqlite)]
         private void ValueConversionTest(DbServer dbServer)
         {
-            ContextUtil.DbServer = dbServer;
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
 
             context.BulkDelete(context.Infos.ToList());
 
@@ -291,8 +294,7 @@ namespace EFCore.BulkExtensions.Tests
         [InlineData(DbServer.Sqlite)]
         private void OwnedTypesTest(DbServer dbServer)
         {
-            ContextUtil.DbServer = dbServer;
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
 
             if (dbServer == DbServer.SqlServer)
             {
@@ -362,8 +364,7 @@ namespace EFCore.BulkExtensions.Tests
         //[InlineData(DbServer.Sqlite)] Not supported
         private void ShadowFKPropertiesTest(DbServer dbServer) // with Foreign Key as Shadow Property
         {
-            ContextUtil.DbServer = dbServer;
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
 
             if (dbServer == DbServer.SqlServer)
             {
@@ -423,10 +424,9 @@ namespace EFCore.BulkExtensions.Tests
         [InlineData(DbServer.SqlServer)]
         private void UpsertWithOutputSortTest(DbServer dbServer)
         {
-            ContextUtil.DbServer = dbServer;
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
 
-            new EFCoreBatchTest().RunDeleteAll(dbServer);
+            new EFCoreBatchTest(_databaseFixture).RunDeleteAll(dbServer);
 
             var entitiesInitial = new List<Item>();
             for (int i = 1; i <= 10; ++i)
@@ -461,8 +461,7 @@ namespace EFCore.BulkExtensions.Tests
         [InlineData(DbServer.Sqlite)]
         private void NoPrimaryKeyTest(DbServer dbServer)
         {
-            ContextUtil.DbServer = dbServer;
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
 
             var list = context.Moduls.ToList();
             var bulkConfig = new BulkConfig { UpdateByProperties = new List<string> { nameof(Modul.Code) } };
@@ -499,9 +498,7 @@ namespace EFCore.BulkExtensions.Tests
         [InlineData(DbServer.Sqlite)]
         private void NonEntityChildTest(DbServer dbServer)
         {
-            ContextUtil.DbServer = dbServer;
-
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
             var list = context.Animals.ToList();
             context.BulkDelete(list);
 
@@ -520,8 +517,7 @@ namespace EFCore.BulkExtensions.Tests
         [Fact]
         private void GeometryColumnTest()
         {
-            ContextUtil.DbServer = DbServer.SqlServer;
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(DbServer.SqlServer));
 
             context.BulkDelete(context.Addresses.ToList());
 
@@ -538,8 +534,7 @@ namespace EFCore.BulkExtensions.Tests
         [Fact]
         private void TablePerTypeInsertTest()
         {
-            ContextUtil.DbServer = DbServer.SqlServer;
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(DbServer.SqlServer));
 
             context.LogPersonReports.Add(new LogPersonReport { }); // used for initial add so that after RESEED it starts from 1, not 0
             context.SaveChanges();
@@ -601,8 +596,7 @@ namespace EFCore.BulkExtensions.Tests
         [Fact]
         private void TableWithSpecialRowVersion()
         {
-            ContextUtil.DbServer = DbServer.SqlServer;
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(DbServer.SqlServer));
             context.AtypicalRowVersionEntities.BatchDelete();
             context.AtypicalRowVersionConverterEntities.BatchDelete();
 
@@ -634,8 +628,7 @@ namespace EFCore.BulkExtensions.Tests
         [Fact]
         private void CustomPrecisionDateTimeTest()
         {
-            ContextUtil.DbServer = DbServer.SqlServer;
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(DbServer.SqlServer));
 
             context.BulkDelete(context.Events.ToList());
 
@@ -682,8 +675,7 @@ namespace EFCore.BulkExtensions.Tests
         [Fact]
         private void ByteArrayPKBulkReadTest()
         {
-            ContextUtil.DbServer = DbServer.Sqlite;
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(DbServer.SqlServer));
 
             var list = context.Archives.ToList();
             if (list.Count > 0)

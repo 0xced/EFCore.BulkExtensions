@@ -8,7 +8,6 @@ namespace EFCore.BulkExtensions.Tests.ShadowProperties
     {
         public GraphDbContext([NotNull] DbContextOptions options) : base(options)
         {
-            this.Database.EnsureCreated();
         }
 
         public DbSet<WorkOrder> WorkOrders { get; set; }

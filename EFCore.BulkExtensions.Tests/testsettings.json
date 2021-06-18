@@ -1,6 +1,0 @@
-{
-  "ConnectionStrings": {
-    "SqlServer": "Server=localhost;Database={databaseName};Trusted_Connection=True;MultipleActiveResultSets=true;",
-    "Sqlite": "Data Source={databaseName}.db"
-  }
-}

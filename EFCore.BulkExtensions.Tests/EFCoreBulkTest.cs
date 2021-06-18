@@ -11,8 +11,16 @@ using Xunit;
 
 namespace EFCore.BulkExtensions.Tests
 {
+    [Collection("Database")]
     public class EFCoreBulkTest
     {
+        private readonly DatabaseFixture _databaseFixture;
+
+        public EFCoreBulkTest(DatabaseFixture databaseFixture)
+        {
+            _databaseFixture = databaseFixture;
+        }
+        
         protected int EntitiesNumber => 10000;
 
         private static Func<TestContext, int> ItemsCountQuery = EF.CompileQuery<TestContext, int>(ctx => ctx.Items.Count());
@@ -25,20 +33,17 @@ namespace EFCore.BulkExtensions.Tests
         //[InlineData(DbServer.SqlServer, false)] // for speed comparison with Regular EF CUD operations
         public void OperationsTest(DbServer dbServer, bool isBulk)
         {
-            ContextUtil.DbServer = dbServer;
+            new EFCoreBatchTest(_databaseFixture).RunDeleteAll(dbServer);
 
-            //DeletePreviousDatabase();
-            new EFCoreBatchTest().RunDeleteAll(dbServer);
-
-            RunInsert(isBulk);
+            RunInsert(isBulk, dbServer);
             RunInsertOrUpdate(isBulk, dbServer);
             RunUpdate(isBulk, dbServer);
 
-            RunRead(isBulk);
+            RunRead(isBulk, dbServer);
 
             if (dbServer == DbServer.SqlServer)
             {
-                RunInsertOrUpdateOrDelete(isBulk); // Not supported for Sqlite (has only UPSERT), instead use BulkRead, then split list into sublists and call separately Bulk methods for Insert, Update, Delete.
+                RunInsertOrUpdateOrDelete(isBulk, dbServer); // Not supported for Sqlite (has only UPSERT), instead use BulkRead, then split list into sublists and call separately Bulk methods for Insert, Update, Delete.
             }
             //RunDelete(isBulk, dbServer);
 
@@ -54,10 +59,9 @@ namespace EFCore.BulkExtensions.Tests
             BulkOperationShouldNotCloseOpenConnection(dbServer, context => context.BulkUpdate(new[] { new Item() }));
         }
 
-        private static void BulkOperationShouldNotCloseOpenConnection(DbServer dbServer, Action<TestContext> bulkOperation)
+        private void BulkOperationShouldNotCloseOpenConnection(DbServer dbServer, Action<TestContext> bulkOperation)
         {
-            ContextUtil.DbServer = dbServer;
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
 
             var sqlHelper = context.GetService<ISqlGenerationHelper>();
             context.Database.OpenConnection();
@@ -88,15 +92,9 @@ namespace EFCore.BulkExtensions.Tests
             }
         }
 
-        private void DeletePreviousDatabase()
+        private void CheckQueryCache(DbServer dbServer)
         {
-            using var context = new TestContext(ContextUtil.GetOptions());
-            context.Database.EnsureDeleted();
-        }
-
-        private void CheckQueryCache()
-        {
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
             var compiledQueryCache = ((MemoryCache)context.GetService<IMemoryCache>());
 
             Assert.Equal(0, compiledQueryCache.Count);
@@ -107,9 +105,9 @@ namespace EFCore.BulkExtensions.Tests
             Debug.WriteLine(percentage);
         }
 
-        private void RunInsert(bool isBulk)
+        private void RunInsert(bool isBulk, DbServer dbServer)
         {
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
 
             var entities = new List<Item>();
             var subEntities = new List<ItemHistory>();
@@ -144,7 +142,7 @@ namespace EFCore.BulkExtensions.Tests
 
             if (isBulk)
             {
-                if (ContextUtil.DbServer == DbServer.SqlServer)
+                if (dbServer == DbServer.SqlServer)
                 {
                     using var transaction = context.Database.BeginTransaction();
                     var bulkConfig = new BulkConfig
@@ -172,7 +170,7 @@ namespace EFCore.BulkExtensions.Tests
 
                     transaction.Commit();
                 }
-                else if (ContextUtil.DbServer == DbServer.Sqlite)
+                else if (dbServer == DbServer.Sqlite)
                 {
                     using var transaction = context.Database.BeginTransaction();
                     var bulkConfig = new BulkConfig() { SetOutputIdentity = true };
@@ -209,7 +207,7 @@ namespace EFCore.BulkExtensions.Tests
 
         private void RunInsertOrUpdate(bool isBulk, DbServer dbServer)
         {
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
 
             var entities = new List<Item>();
             var dateTimeNow = DateTime.Now;
@@ -251,9 +249,9 @@ namespace EFCore.BulkExtensions.Tests
             Assert.Equal("name InsertOrUpdate " + EntitiesNumber, lastEntity.Name);
         }
 
-        private void RunInsertOrUpdateOrDelete(bool isBulk)
+        private void RunInsertOrUpdateOrDelete(bool isBulk, DbServer dbServer)
         {
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
 
             var entities = new List<Item>();
             var dateTimeNow = DateTime.Now;
@@ -321,7 +319,7 @@ namespace EFCore.BulkExtensions.Tests
 
         private void RunUpdate(bool isBulk, DbServer dbServer)
         {
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
 
             int counter = 1;
             var entities = context.Items.AsNoTracking().ToList();
@@ -361,9 +359,9 @@ namespace EFCore.BulkExtensions.Tests
             Assert.Equal("name InsertOrUpdate " + EntitiesNumber, lastEntity.Name);
         }
 
-        private void RunRead(bool isBulk)
+        private void RunRead(bool isBulk, DbServer dbServer)
         {
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
 
             var entities = new List<Item>();
             for (int i = 1; i < EntitiesNumber; i++)
@@ -399,7 +397,7 @@ namespace EFCore.BulkExtensions.Tests
 
         private void RunDelete(bool isBulk, DbServer dbServer)
         {
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
 
             var entities = AllItemsQuery(context).ToList();
             // ItemHistories will also be deleted because of Relationship - ItemId (Delete Rule: Cascade)

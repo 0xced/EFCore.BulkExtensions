@@ -9,8 +9,16 @@ using Xunit;
 
 namespace EFCore.BulkExtensions.Tests
 {
+    [Collection("Database")]
     public class EFCoreBulkUnderlyingTest
     {
+        private readonly DatabaseFixture _databaseFixture;
+
+        public EFCoreBulkUnderlyingTest(DatabaseFixture databaseFixture)
+        {
+            _databaseFixture = databaseFixture;
+        }
+
         protected int EntitiesNumber => 1000;
 
         private static Func<TestContext, int> ItemsCountQuery = EF.CompileQuery<TestContext, int>(ctx => ctx.Items.Select(i => i.ItemId).Count());
@@ -26,11 +34,11 @@ namespace EFCore.BulkExtensions.Tests
             RunDelete(isBulk);
         }
 
-        public static DbContextOptions GetOptions()
+        public DbContextOptions GetOptions()
         {
             var builder = new DbContextOptionsBuilder<TestContext>();
             var databaseName = nameof(EFCoreBulkTest);
-            var connectionString = ContextUtil.GetSqlServerConnectionString(databaseName);
+            var connectionString = _databaseFixture.GetSqlServerConnectionString(databaseName);
             var connection = new SqlConnection(connectionString) as DbConnection;
             connection = new MyConnection(connection);
             builder.UseSqlServer(connection, opt => opt.UseNetTopologySuite());

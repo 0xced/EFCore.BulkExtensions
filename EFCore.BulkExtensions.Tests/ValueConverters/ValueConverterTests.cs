@@ -1,22 +1,28 @@
 ﻿using EFCore.BulkExtensions.SqlAdapters;
 using Microsoft.EntityFrameworkCore;
-using System;
 using System.Collections.Generic;
 using System.Linq;
 using Xunit;
 
 namespace EFCore.BulkExtensions.Tests.ValueConverters
 {
-    public class ValueConverterTests: IDisposable
+    [Collection("Database")]
+    public class ValueConverterTests
     {
+        private readonly DatabaseFixture _databaseFixture;
+
+        public ValueConverterTests(DatabaseFixture databaseFixture)
+        {
+            _databaseFixture = databaseFixture;
+        }
+        
         [Theory]
         [InlineData(DbServer.SqlServer)]
         [InlineData(DbServer.Sqlite)]
         public void BulkInsertOrUpdate_EntityUsingBuiltInEnumToStringConverter_SavesToDatabase(DbServer dbServer)
         {
-            ContextUtil.DbServer = dbServer;
-
-            using var db = new VcDbContext(ContextUtil.GetOptions<VcDbContext>(databaseName: $"{nameof(EFCoreBulkTest)}_ValueConverters"));
+            using var db = new VcDbContext(_databaseFixture.GetOptions<VcDbContext>(dbServer, databaseName: $"{nameof(EFCoreBulkTest)}_ValueConverters"));
+            using var _ = new EnsureCreatedAndDeleted(db.Database);
 
             db.BulkInsertOrUpdate(this.GetTestData().ToList());
 
@@ -40,9 +46,8 @@ namespace EFCore.BulkExtensions.Tests.ValueConverters
         [InlineData(DbServer.Sqlite)]
         public void BatchUpdate_EntityUsingBuiltInEnumToStringConverter_UpdatesDatabaseWithEnumStringValue(DbServer dbServer)
         {
-            ContextUtil.DbServer = dbServer;
-
-            using var db = new VcDbContext(ContextUtil.GetOptions<VcDbContext>(databaseName: $"{nameof(EFCoreBulkTest)}_ValueConverters"));
+            using var db = new VcDbContext(_databaseFixture.GetOptions<VcDbContext>(dbServer, databaseName: $"{nameof(EFCoreBulkTest)}_ValueConverters"));
+            using var _ = new EnsureCreatedAndDeleted(db.Database);
 
             db.BulkInsertOrUpdate(this.GetTestData().ToList());
 
@@ -72,9 +77,8 @@ namespace EFCore.BulkExtensions.Tests.ValueConverters
         [InlineData(DbServer.Sqlite)]
         public void BatchDelete_UsingWhereExpressionWithValueConverter_Deletes(DbServer dbServer)
         {
-            ContextUtil.DbServer = dbServer;
-
-            using var db = new VcDbContext(ContextUtil.GetOptions<VcDbContext>(databaseName: $"{nameof(EFCoreBulkTest)}_ValueConverters"));
+            using var db = new VcDbContext(_databaseFixture.GetOptions<VcDbContext>(dbServer, databaseName: $"{nameof(EFCoreBulkTest)}_ValueConverters"));
+            using var _ = new EnsureCreatedAndDeleted(db.Database);
 
             db.BulkInsertOrUpdate(this.GetTestData().ToList());
 
@@ -94,12 +98,6 @@ namespace EFCore.BulkExtensions.Tests.ValueConverters
             };
 
             yield return one;
-        }
-
-        public void Dispose()
-        {
-            using var db = new VcDbContext(ContextUtil.GetOptions<VcDbContext>(databaseName: $"{nameof(EFCoreBulkTest)}_ValueConverters"));
-            db.Database.EnsureDeleted();
         }
     }
 }

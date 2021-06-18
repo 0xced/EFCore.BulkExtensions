@@ -2,7 +2,6 @@
 using EFCore.BulkExtensions.Tests.IncludeGraph.Model;
 using EFCore.BulkExtensions.Tests.ShadowProperties;
 using Microsoft.EntityFrameworkCore;
-using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -10,8 +9,16 @@ using Xunit;
 
 namespace EFCore.BulkExtensions.Tests.IncludeGraph
 {
-    public class IncludeGraphTests : IDisposable
+    [Collection("Database")]
+    public class IncludeGraphTests
     {
+        private readonly DatabaseFixture _databaseFixture;
+
+        public IncludeGraphTests(DatabaseFixture databaseFixture)
+        {
+            _databaseFixture = databaseFixture;
+        }
+        
         private static WorkOrder WorkOrder1 = new WorkOrder
         {
             Description = "Fix belt",
@@ -83,10 +90,8 @@ namespace EFCore.BulkExtensions.Tests.IncludeGraph
         //[InlineData(DbServer.Sqlite)]
         public async Task BulkInsertOrUpdate_EntityWithNestedObjectGraph_SavesGraphToDatabase(DbServer dbServer)
         {
-            ContextUtil.DbServer = dbServer;
-
-            using var db = new GraphDbContext(ContextUtil.GetOptions<GraphDbContext>(databaseName: $"{nameof(EFCoreBulkTest)}_Graph"));
-            await db.Database.EnsureCreatedAsync();
+            using var db = new GraphDbContext(_databaseFixture.GetOptions<GraphDbContext>(dbServer, databaseName: $"{nameof(EFCoreBulkTest)}_Graph"));
+            using var _ = new EnsureCreatedAndDeleted(db.Database);
 
             // To ensure there are no stack overflows with circular reference trees, we must test for that.
             // Set all navigation properties so the base navigation and its inverse both have values
@@ -130,12 +135,6 @@ namespace EFCore.BulkExtensions.Tests.IncludeGraph
             yield return WorkOrder1;
             yield return WorkOrder2;
 
-        }
-
-        public void Dispose()
-        {
-            using var db = new GraphDbContext(ContextUtil.GetOptions<GraphDbContext>(databaseName: $"{nameof(EFCoreBulkTest)}_Graph"));
-            db.Database.EnsureDeleted();
         }
     }
 }

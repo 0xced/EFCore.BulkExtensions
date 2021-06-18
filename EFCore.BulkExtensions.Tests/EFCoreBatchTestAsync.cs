@@ -8,8 +8,16 @@ using Xunit;
 
 namespace EFCore.BulkExtensions.Tests
 {
+    [Collection("Database")]
     public class EFCoreBatchTestAsync
     {
+        private readonly DatabaseFixture _databaseFixture;
+
+        public EFCoreBatchTestAsync(DatabaseFixture databaseFixture)
+        {
+            _databaseFixture = databaseFixture;
+        }
+        
         protected int EntitiesNumber => 1000;
 
         [Theory]
@@ -17,24 +25,22 @@ namespace EFCore.BulkExtensions.Tests
         [InlineData(DbServer.Sqlite)]
         public async Task BatchTestAsync(DbServer dbServer)
         {
-            ContextUtil.DbServer = dbServer;
-
             await RunDeleteAllAsync(dbServer);
-            await RunInsertAsync();
+            await RunInsertAsync(dbServer);
             await RunBatchUpdateAsync(dbServer);
 
             int deletedEntities = 1;
             if (dbServer == DbServer.SqlServer)
             {
-                deletedEntities = await RunTopBatchDeleteAsync();
+                deletedEntities = await RunTopBatchDeleteAsync(dbServer);
             }
 
-            await RunBatchDeleteAsync();
+            await RunBatchDeleteAsync(dbServer);
 
-            await UpdateSettingAsync(SettingsEnum.Sett1, "Val1UPDATE");
-            await UpdateByteArrayToDefaultAsync();
+            await UpdateSettingAsync(dbServer, SettingsEnum.Sett1, "Val1UPDATE");
+            await UpdateByteArrayToDefaultAsync(dbServer);
 
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
 
             var firstItem = (await context.Items.ToListAsync()).First();
             var lastItem = (await context.Items.ToListAsync()).Last();
@@ -53,7 +59,7 @@ namespace EFCore.BulkExtensions.Tests
 
         internal async Task RunDeleteAllAsync(DbServer dbServer)
         {
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
             await context.Items.AddAsync(new Item { }); // used for initial add so that after RESEED it starts from 1, not 0
             await context.SaveChangesAsync();
 
@@ -70,9 +76,9 @@ namespace EFCore.BulkExtensions.Tests
             context.Database.ExecuteSqlRaw(deleteTableSql);
         }
 
-        private async Task RunInsertAsync()
+        private async Task RunInsertAsync(DbServer dbServer)
         {
-            using (var context = new TestContext(ContextUtil.GetOptions()))
+            using (var context = new TestContext(_databaseFixture.GetOptions(dbServer)))
             {
                 var entities = new List<Item>();
                 for (int i = 1; i <= EntitiesNumber; i++)
@@ -96,7 +102,7 @@ namespace EFCore.BulkExtensions.Tests
 
         private async Task RunBatchUpdateAsync(DbServer dbServer)
         {
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
 
             //var updateColumns = new List<string> { nameof(Item.Quantity) }; // Adding explicitly PropertyName for update to its default value
 
@@ -143,21 +149,21 @@ namespace EFCore.BulkExtensions.Tests
             }
         }
 
-        private async Task<int> RunTopBatchDeleteAsync()
+        private async Task<int> RunTopBatchDeleteAsync(DbServer dbServer)
         {
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
             return await context.Items.Where(a => a.ItemId > 500).Take(1).BatchDeleteAsync();
         }
 
-        private async Task RunBatchDeleteAsync()
+        private async Task RunBatchDeleteAsync(DbServer dbServer)
         {
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
             await context.Items.Where(a => a.ItemId > 500).BatchDeleteAsync();
         }
 
-        private async Task UpdateSettingAsync(SettingsEnum settings, object value)
+        private async Task UpdateSettingAsync(DbServer dbServer, SettingsEnum settings, object value)
         {
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
 
             await context.TruncateAsync<Setting>();
 
@@ -170,9 +176,9 @@ namespace EFCore.BulkExtensions.Tests
             await context.TruncateAsync<Setting>();
         }
 
-        private async Task UpdateByteArrayToDefaultAsync()
+        private async Task UpdateByteArrayToDefaultAsync(DbServer dbServer)
         {
-            using var context = new TestContext(ContextUtil.GetOptions());
+            using var context = new TestContext(_databaseFixture.GetOptions(dbServer));
 
             await context.Files.BatchUpdateAsync(new File { DataBytes = null }, updateColumns: new List<string> { nameof(File.DataBytes) }).ConfigureAwait(false);
             await context.Files.BatchUpdateAsync(a => new File { DataBytes = null }).ConfigureAwait(false);

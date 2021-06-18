@@ -1,10 +1,7 @@
 ﻿using EFCore.BulkExtensions.SqlAdapters;
 using Microsoft.EntityFrameworkCore;
-using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 using Xunit;
 
@@ -70,16 +67,22 @@ namespace EFCore.BulkExtensions.Tests.IncludeGraph
         }
     }
 
-    public class Issue547 : IDisposable
+    [Collection("Database")]
+    public class Issue547
     {
+        private readonly DatabaseFixture _databaseFixture;
+
+        public Issue547(DatabaseFixture databaseFixture)
+        {
+            _databaseFixture = databaseFixture;
+        }
+        
         [Theory]
         [InlineData(DbServer.SqlServer)]
         public async Task Test(DbServer dbServer)
         {
-            ContextUtil.DbServer = dbServer;
-
-            using var db = new Issue547DbContext(ContextUtil.GetOptions<Issue547DbContext>(databaseName: $"{nameof(EFCoreBulkTest)}_Issue547"));
-            await db.Database.EnsureCreatedAsync();
+            using var db = new Issue547DbContext(_databaseFixture.GetOptions<Issue547DbContext>(dbServer, databaseName: $"{nameof(EFCoreBulkTest)}_Issue547"));
+            using var _ = new EnsureCreatedAndDeleted(db.Database);
 
             var tranches = new List<RootEntity>
             {
@@ -136,12 +139,6 @@ namespace EFCore.BulkExtensions.Tests.IncludeGraph
                 Assert.NotNull(re.OwnedInSeparateTable);
                 Assert.NotEmpty(re.OwnedInSeparateTable.Flowers);
             }
-        }
-
-        public void Dispose()
-        {
-            using var db = new Issue547DbContext(ContextUtil.GetOptions<Issue547DbContext>(databaseName: $"{nameof(EFCoreBulkTest)}_Issue547"));
-            db.Database.EnsureDeleted();
         }
     }
 }
